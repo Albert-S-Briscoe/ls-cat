@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
 	char* path = NULL;
 	int lsl = 0;
 
+	// process command line arguments
 	for (int arg = 1; arg < argc; arg++) {
 		if (argv[arg][0] == '-') {
 			switch (argv[arg][1]) {
@@ -78,15 +79,33 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	// need this for dircolors to work correctly with my bashrc. It tests for interactivity.
 #define SHELL "bash -ci '"
 #define SHELL_END "'"
 
-	char* cat_fmt = SHELL "cat %s 2>/dev/null" SHELL_END;
-	char* ls_fmt  = SHELL "ls %s 2>/dev/null" SHELL_END;
-	char* lsl_fmt = SHELL "ls -l %s 2>/dev/null" SHELL_END;
+	// I should probably explain the '\"'\"' insanity.
+	// First, the c compiler takes the quoted string and applies the \ escape sequences.
+	// the result is '"'"'
+	// then, at runtime, system() sees: bash -c '... '"'"' ... '"'"' ...'
+	// it then calls bash, but first it needs to get the argumets.
+	// it takes '... ', "'", ' ...', "'", and ' ...', removes the quotes and concats it into ... ' ... ' ...
+	// the center ... is the path, a string the user has full control of, and as such, should be quoted for the entirety of the process until ls or cat has it.
+	// TODO: sanitize path input by replacing every ' with '"'"'
+	char* cat_fmt        = SHELL "cat   '\"'\"'%s'\"'\"' 2>/dev/null" SHELL_END;
+	char* ls_fmt         = SHELL "ls    '\"'\"'%s'\"'\"' 2>/dev/null" SHELL_END;
+	char* lsl_fmt        = SHELL "ls -l '\"'\"'%s'\"'\"' 2>/dev/null" SHELL_END;
+	char* silent_cat_fmt = SHELL "cat   '\"'\"'%s'\"'\"' 2>/dev/null >/dev/null" SHELL_END;
+	char* silent_ls_fmt  = SHELL "ls    '\"'\"'%s'\"'\"' 2>/dev/null >/dev/null" SHELL_END;
+	char* silent_lsl_fmt = SHELL "ls -l '\"'\"'%s'\"'\"' 2>/dev/null >/dev/null" SHELL_END;
 
-	if (systemf(cat_fmt, path)) {
-		if (systemf(lsl ? lsl_fmt : ls_fmt, path)) {
+	if (!systemf(silent_cat_fmt, path)) {
+		printf("cat:\n");
+		return systemf(cat_fmt, path);
+	} else {
+		if (!systemf(lsl ? silent_lsl_fmt : silent_ls_fmt, path)) {
+			printf("ls:\n");
+			return systemf(lsl ? lsl_fmt : ls_fmt, path);
+		} else {
 			fprintf(stderr, "Error: cat and ls both failed\n");
 			exit(1);
 		}
